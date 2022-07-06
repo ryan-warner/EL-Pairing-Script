@@ -1,12 +1,15 @@
 import csv
-from math import comb
+from math import comb, floor
 from os.path import exists
 import random
 
+## Issue now -- might pair and leave one non-unique pair
+## Need to tweak so that it will restart a week's pairing if this is the case
+
 ## Script Options ##
 numWeeks = 26
-useRecycledPairs = True
-useOldPairings = True
+useRecycledPairs = False
+useOldPairings = False
 
 ## File Information ##
 outputFilePath = "Buddy Dates - EL 2023-2024 Spring.csv"
@@ -15,7 +18,7 @@ emergelingsPath = "roster.csv"
 advisorsPath = "advisors.csv"
 
 ## Function to gather unique pairs ##
-def getNewPair(optionsList, advisorsList, oldPairingsList, allowRecycledPairs):
+def getNewPair(optionsList, advisorsList, result, oldPairingsList, allowRecycledPairs):
     allowableException = False
     forceExit = False
 
@@ -28,7 +31,7 @@ def getNewPair(optionsList, advisorsList, oldPairingsList, allowRecycledPairs):
             forceExit = True
                
         pairing = random.sample(optionsList, 2)
-        checkMessage = checkPairing(pairing, advisorsList, oldPairingsList, tempList, allowableException)
+        checkMessage = checkPairing(pairing, advisorsList, result, oldPairingsList, tempList, allowableException)
         if checkMessage == "Match OK":
             return pairing
         elif checkMessage == "Already tried":
@@ -47,8 +50,25 @@ def getNewPair(optionsList, advisorsList, oldPairingsList, allowRecycledPairs):
     return None
 
 ## Function to check if pairing is unique ##
-def checkPairing(pairing, advisorsList, oldPairingsList, tempList, allowRecycledPairs):
+def checkPairing(pairing, advisorsList, result, oldPairingsList, tempList, allowRecycledPairs):
     reversedPairing = pairing[::-1]
+
+    person1 = pairing[0]
+    person2 = pairing[1]
+
+    for pair in result:
+        if person1 == pair[0] or person1 == pair[1]:
+            if pairing in tempList or reversedPairing in tempList:
+                return "Already tried"
+            else:
+                return "Already matched"
+        
+        if person2 == pair[0] or person2 == pair[1]:
+            if pairing in tempList or reversedPairing in tempList:
+                return "Already tried"
+            else:
+                return "Already matched"
+
     if (pairing in tempList or reversedPairing in tempList) and not allowRecycledPairs:
         return "Already tried"
     elif pairing[0] in advisorsList and pairing[1] in advisorsList:
@@ -98,7 +118,9 @@ with open(advisorsPath, 'r') as advisorsInput:
     reader = csv.reader(advisorsInput)
     advisors = list(reader)
 
-names = emergelings + advisors
+names = []
+names.extend(emergelings)
+names.extend(advisors)
 numMembers = len(names)
 
 ## Include old.csv in the directory when running if you want to account for old pairings ##
@@ -115,26 +137,60 @@ outputFile = open(outputFilePath, 'w')
 writer = csv.writer(outputFile)
 
 result = []
+tempCompletePairings = []
+tempCompletePairings.extend(completePairings)
 counter = 0
+attemptCounter = 0
 currentWeek = 1
 
 ## Pairing Loop ##
 while currentWeek <= numWeeks:
-    while counter < numMembers / 2:
+    escape = False
+    while counter < numMembers / 2 and not escape:
         # get a random pairing from the names array
-        pairing = getNewPair(names, advisors, completePairings, useRecycledPairs)
+        pairing = getNewPair(names, advisors, result, tempCompletePairings, useRecycledPairs)
         if pairing is not None:
             result.append(pairing)
-            completePairings.append(pairing)
+            tempCompletePairings.append(pairing)
         counter += 1
+
+        expectedCombos = numMembers / 2
+        pairsPossible = comb(len(names), 2)
+        expectedWeek = floor(pairsPossible / expectedCombos)
+        remainder = pairsPossible % expectedCombos
+        pairsMade = expectedCombos * (currentWeek - 1)
+        pairsRemaining = pairsPossible - pairsMade
+
+        ## Counter >= expectedCombos, results less than number expected, 
+
+        if counter >= expectedCombos:
+            if len(result) < expectedCombos and expectedWeek > currentWeek:
+                tempCompletePairings = []
+                tempCompletePairings.extend(completePairings)
+                result = []
+                counter = 0
+                attemptCounter += 1
+            elif currentWeek == expectedWeek and len(result) < remainder :
+                tempCompletePairings = []
+                tempCompletePairings.extend(completePairings)
+                result = []
+                counter = 0
+                attemptCounter += 1
+            elif counter >= expectedCombos:
+                completePairings = []
+                completePairings.extend(tempCompletePairings)
+                escape = True
+                attemptCounter += 1
+        
 
     writePairings(result, currentWeek, writer)
     if (len(result) == 0):
         writer.writerow(["Maximum combinations reached. Consider allowing recycled pairs."])
     writer.writerow("")
-    print("Week " + str(currentWeek) + " pairings complete.")
+    print("Week " + str(currentWeek) + " pairings complete | Attempts: " + str(attemptCounter))
     currentWeek += 1
     counter = 0
+    attemptCounter = 0
     result = []
 
 outputFile.close()
