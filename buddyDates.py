@@ -5,7 +5,7 @@ import random
 
 ## Script Options ##
 numWeeks = 26
-useRecycledPairs = False
+useRecycledPairs = True
 useOldPairings = True
 
 ## File Information ##
@@ -138,4 +138,5 @@ while currentWeek <= numWeeks:
     result = []
 
 outputFile.close()
+print("")
 print("All done :)")
