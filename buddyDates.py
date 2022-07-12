@@ -3,9 +3,6 @@ from math import comb, floor
 from os.path import exists
 import random
 
-## Issue now -- might pair and leave one non-unique pair
-## Need to tweak so that it will restart a week's pairing if this is the case
-
 ## Script Options ##
 numWeeks = 26
 useRecycledPairs = False
@@ -18,67 +15,63 @@ emergelingsPath = "roster.csv"
 advisorsPath = "advisors.csv"
 
 ## Function to gather unique pairs ##
-def getNewPair(optionsList, advisorsList, result, oldPairingsList, allowRecycledPairs):
-    allowableException = False
-    forceExit = False
+def getPair(funcNames, funcAdvisors, oldPairings, currentPairings, allowRecycledPairs):
+    attemptedMatches = []
 
-    counter = 1
-    tempList = [] # Temp list contains the combinations that have been tried
-    while counter <= comb(len(optionsList), 2):
-        if counter == comb(len(optionsList), 2) and allowRecycledPairs:
-            allowableException = True
-        elif counter == comb(len(optionsList), 2):
-            forceExit = True
-        pairing = random.sample(optionsList, 2)
-        checkMessage = checkPairing(pairing, advisorsList, result, oldPairingsList, tempList, allowableException)
-        if checkMessage == "Match OK":
+    for attempt in range(1, comb(len(funcNames),2) + 1):
+        pairing = getPairing(funcNames, attemptedMatches, True)
+        attemptedMatches.append(pairing)
+        if isUnique(pairing, funcAdvisors, currentPairings, oldPairings, False):
             return pairing
-        elif checkMessage == "Already tried":
-            if not allowRecycledPairs and forceExit:
-                counter += 1
-            else:
-                pass
-        elif checkMessage == "Advisors may not be matched":
-            tempList.append(pairing)
-            counter += 1
-        elif checkMessage == "Already matched - recycled pairs allowed":
+        elif allowRecycledPairs and attempt == comb(len(funcNames),2):
+            pairingOK = False
+            funcAttemptCounter = 0
+            while not pairingOK:
+                if isUnique(pairing, funcAdvisors, currentPairings, oldPairings, True):
+                   pairingOK = True
+                else:
+                    pairing = getPairing(funcNames, attemptedMatches, False)
+                    funcAttemptCounter += 1
+                if funcAttemptCounter > 5000:
+                    return -1
             return pairing
-        elif checkMessage == "Already matched":
-            tempList.append(pairing)
-            counter += 1
-    return None
+        elif attempt == comb(len(funcNames), 2):
+            return None
+
+## Function to get pairing
+def getPairing(funcNames, attemptedPairings, rigidCheck):
+    newPairing = False
+    while not newPairing:
+        pairing = random.sample(funcNames, 2)
+        reversedPairing = pairing[::-1]
+        if not rigidCheck:
+            newPairing = True
+        elif pairing not in attemptedPairings or reversedPairing not in attemptedPairings:
+            newPairing = True
+
+    return pairing
 
 ## Function to check if pairing is unique ##
-def checkPairing(pairing, advisorsList, result, oldPairingsList, tempList, allowRecycledPairs):
-    reversedPairing = pairing[::-1]
+def isUnique(funcPairing, funcAdvisors, currentPairings, oldPairings, basicCheck):
+    reversedPairing = funcPairing[::-1]
 
-    person1 = pairing[0]
-    person2 = pairing[1]
+    person1 = funcPairing[0]
+    person2 = funcPairing[1]
 
-    for pair in result:
-        if person1 == pair[0] or person1 == pair[1]:
-            if pairing in tempList or reversedPairing in tempList:
-                return "Already tried"
-            else:
-                return "Already matched"
-        
-        if person2 == pair[0] or person2 == pair[1]:
-            if pairing in tempList or reversedPairing in tempList:
-                return "Already tried"
-            else:
-                return "Already matched"
+    for tempPairing in currentPairings:
+        if person1 in tempPairing or person2 in tempPairing:
+            return False
 
-    if (pairing in tempList or reversedPairing in tempList) and not allowRecycledPairs:
-        return "Already tried"
-    elif pairing[0] in advisorsList and pairing[1] in advisorsList:
-        return "Advisors may not be paired"
-    elif pairing in oldPairingsList or reversedPairing in oldPairingsList:
-        if allowRecycledPairs:
-            return "Already matched - recycled pairs allowed"
-        else:
-            return "Already matched"
-    else:
-        return "Match OK"
+    if person1 in funcAdvisors and person2 in funcAdvisors:
+        return False
+    
+    if basicCheck:
+        return True
+
+    for oldPair in oldPairings:
+        if funcPairing == oldPair or reversedPairing == oldPair:
+            return False
+    return True
 
 ## Function to write weekly pairings to a file ##
 def writePairings(pairings, weekNum, writer):
@@ -88,135 +81,135 @@ def writePairings(pairings, weekNum, writer):
 
 ## Function to import old pairings from an existing file ##
 def getOldPairings():
+    if not exists(oldPairingsPath):
+        print("Error: The provided pairings file does not exist. Please double check that the file is in the same directory as this script, and that you have provided the correct name.")
+        exit()
+    else:
+        print("Old pairings found. Importing...")
+
     oldPairings = []
     with open(oldPairingsPath, 'r') as csvfile:
         reader = csv.reader(csvfile)
         fileContent = list(reader)
         for line in fileContent:
             if len(line) != 0 and line[0] != "" and "Week" not in line[0]:
-                oldPairings.append([[line[0]], [line[1]]])
+                oldPairings.append([[line[0]],[line[1]]])
     return oldPairings
 
 ## Main Program ##
-def main():
-    if not exists(emergelingsPath):
-        print("Error: The provided Emergeling roster does not exist. Please double check that the file is in the same directory as this script, and that you have provided the correct name.")
-        exit()
 
-    if not exists(advisorsPath):
-        print("Error: The provided advisors roster does not exist. Please double check that the file is in the same directory as this script, and that you have provided the correct name.")
-        exit()
+def run():
+    # Get Emergeling Data
+    if not exists(emergelingsPath):
+            print("Error: The provided Emergeling roster does not exist. Please double check that the file is in the same directory as this script, and that you have provided the correct name.")
+            exit()
+    else:
+        print("Emergeling roster found.")
 
     with open(emergelingsPath, 'r') as emergelingsInput:
         # read each line of the csv file into an array of names
         reader = csv.reader(emergelingsInput)
         emergelings = list(reader)
+        print("Emergeling roster loaded.")
+
+    # Get Advisor Data
+    if not exists(advisorsPath):
+        print("Error: The provided advisors roster does not exist. Please double check that the file is in the same directory as this script, and that you have provided the correct name.")
+        exit()
+    else:
+        print("Advisors roster found.")
 
     with open(advisorsPath, 'r') as advisorsInput:
         # read each line of the csv file into an array of names
         reader = csv.reader(advisorsInput)
         advisors = list(reader)
+        print("Advisors roster loaded.")
 
-    names = []
-    names.extend(emergelings)
-    names.extend(advisors)
-    numMembers = len(names)
-    numOldPairings = 0
+    names = emergelings + advisors
+    print("")
 
-    ## Include old.csv in the directory when running if you want to account for old pairings ##
+    # Set up old matches
     if useOldPairings:
-        if exists(oldPairingsPath):
-            completePairings = getOldPairings()
-            numOldPairings = len(completePairings)
-        else:
-            print("Error: The old pairings provided do not exist. Please double check that the file is in the same directory as this script, and that you have provided the correct name.")
-            exit()
+        oldMatches = getOldPairings()
     else:
-        completePairings = []
-        numOldPairings = 0
+        oldMatches = []
 
+    # Loop Variables
+    result = []
+    currentWeek = []
+    counter = 1
+    numMembers = len(names)
+    numExpectedPairings = floor(numMembers / 2)
+    pairsPossible = comb(len(names), 2) - comb(len(advisors), 2) - len(oldMatches)
+    #pairsRemaining = comb(len(names), 2) - comb(len(advisors), 2) - len(oldMatches)
+    expectedWeek = floor(pairsPossible / numExpectedPairings) + 1
+    remainder = pairsPossible % numExpectedPairings
+    attemptCounter = 0
+    weekInd = 0
+
+    while weekInd < numWeeks:
+        escape = False
+        while counter <= numExpectedPairings and not escape:
+            pairing = getPair(names, advisors, oldMatches, currentWeek, useRecycledPairs)
+            attemptCounter += 1
+            if pairing is not None:
+                currentWeek.append(pairing)
+            counter += 1
+            
+            if pairing == -1:
+                print("Error: Unable to generate a valid pairing. Trying again...")
+                print("")
+                return False
+
+            if attemptCounter > 5000:
+                print("Error: Unable to generate a valid pairing. Trying again...")
+                print("")
+                return False
+
+            if counter > numExpectedPairings and useRecycledPairs and len(currentWeek) < numExpectedPairings:
+                currentWeek = []
+                counter = 1
+            elif counter > numExpectedPairings and weekInd + 1 < expectedWeek and len(currentWeek) < numExpectedPairings:
+                currentWeek = []
+                counter = 1
+            elif counter > numExpectedPairings and weekInd + 1 == expectedWeek and remainder != 0 and len(currentWeek) < remainder:
+                currentWeek = []
+                counter = 1
+
+            if counter > numExpectedPairings:
+                attemptCounter = 0
+                escape = True
+
+        result.append(currentWeek)
+        oldMatches.extend(currentWeek)
+        currentWeek = []
+        counter = 1
+        weekInd += 1
+        print("Week " + str(weekInd) + " complete.")
+    
     outputFile = open(outputFilePath, 'w')
     writer = csv.writer(outputFile)
 
-    result = []
-    partialResult = []
-    tempCompletePairings = []
-    tempCompletePairings.extend(completePairings)
-    counter = 0
-    attemptCounter = 0
-    currentWeek = 1
-
-    ## Pairing Loop ##
-    while currentWeek <= numWeeks:
-        escape = False
-        while counter < numMembers / 2 and not escape:
-            # get a random pairing from the names array
-            pairing = getNewPair(names, advisors, partialResult, tempCompletePairings, useRecycledPairs)
-            if pairing is not None:
-                partialResult.append(pairing)
-                tempCompletePairings.append(pairing)
-            counter += 1
-
-            expectedCombos = numMembers / 2
-            pairsPossible = comb(len(names), 2)
-            #print(pairsPossible)
-            pairsPossible = pairsPossible - numOldPairings
-            #print(pairsPossible)
-            expectedWeek = floor(pairsPossible / expectedCombos)
-            remainder = pairsPossible % expectedCombos
-            pairsMade = expectedCombos * (currentWeek - 1)
-            pairsRemaining = pairsPossible - pairsMade
-
-            ## Counter >= expectedCombos, results less than number expected, 
-
-            if attemptCounter > 3000:
-                tempCompletePairings = []
-                tempCompletePairings.extend(completePairings)
-                partialResult = []
-                currentWeek = 0
-                counter = 0
-                attemptCounter = 0
-                partialResult = []
-                
-
-            if counter >= expectedCombos:
-                if len(partialResult) < expectedCombos and expectedWeek > currentWeek:
-                    tempCompletePairings = []
-                    for item in completePairings:
-                        tempCompletePairings.append(item)
-                    partialResult = []
-                    counter = 0
-                    attemptCounter += 1
-                elif currentWeek == expectedWeek and len(partialResult) < remainder and remainder != expectedCombos:
-                    tempCompletePairings = []
-                    for item in completePairings:
-                        tempCompletePairings.append(item)
-                    partialResult = []
-                    counter = 0
-                    attemptCounter += 1
-                elif counter >= expectedCombos:
-                    completePairings = []
-                    for item in tempCompletePairings:
-                        completePairings.append(item)
-                    result.append(partialResult)
-                    escape = True
-                    attemptCounter += 1
-
-        currentWeek += 1
-        counter = 0
-        attemptCounter = 0
-        partialResult = []
-            
-    currentWeek = 1
+    weekCounter = 1
     for weeklyPairing in result:
-        writePairings(weeklyPairing, currentWeek, writer)
+        writePairings(weeklyPairing, weekCounter, writer)
         if (len(weeklyPairing) == 0):
             writer.writerow(["Maximum combinations reached. Consider allowing recycled pairs."])
         writer.writerow("")
-        #print("Week " + str(currentWeek) + " pairings complete")
-        currentWeek += 1
-            
+        weekCounter += 1
 
     outputFile.close()
     print("")
     print("All done :)")
+    return True
+
+## For use in testing (test.py) ##
+## def main():
+##     finished = False
+##     while not finished:
+##         finished = run()
+
+## If testing, comment this block out ##
+finished = False
+while not finished:
+    finished = run()
