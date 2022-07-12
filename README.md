@@ -16,6 +16,7 @@ Edit the options directly in script. Could be turned into CLI arguments, but for
     outputFilePath = "outputFile.csv"
     oldPairingsPath = "inputFile.csv"
     emergelingsPath = "roster.csv"
+    advisorsPath = "advisors.csv"
 
 It should be possible to locate files outside of the folder where the script is contained, but it's likely easiest to simply place the script in the folder where pairings will be stored. 
 
